@@ -132,6 +132,10 @@ if(GRPPI_FF_ENABLE)
   endif()
 endif(GRPPI_FF_ENABLE)
 
+# SYCL Library
+add_definitions(-DGRPPI_SYCL)
+message(WARNING "Testing SYCL")
+
 # Doxygen Documentation
 option( GRPPI_DOXY_ENABLE "Require Doxygen library" OFF )
 if( GRPPI_DOXY_ENABLE )
