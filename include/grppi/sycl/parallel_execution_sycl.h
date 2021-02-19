@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <tuple>
 #include <iterator>
+#include <CL/sycl.hpp>
 
 namespace grppi {
 
@@ -85,7 +86,7 @@ public:
   */
   template <typename ... InputIterators, typename OutputIterator, 
             typename Transformer>
-  constexpr void map(std::tuple<InputIterators...> firsts,
+  void map(std::tuple<InputIterators...> firsts,
       OutputIterator first_out, std::size_t sequence_size, 
       Transformer && transform_op) const;
   
@@ -212,14 +213,14 @@ constexpr bool supports_map<parallel_execution_sycl>() { return true; }
 \note Specialization for sequential_execution.
 */
 template <>
-constexpr bool supports_reduce<parallel_execution_sycl>() { return true; }
+constexpr bool supports_reduce<parallel_execution_sycl>() { return false; }
 
 /**
 \brief Determines if an execution policy supports the map-reduce pattern.
 \note Specialization for sequential_execution.
 */
 template <>
-constexpr bool supports_map_reduce<parallel_execution_sycl>() { return true; }
+constexpr bool supports_map_reduce<parallel_execution_sycl>() { return false; }
 
 /**
 \brief Determines if an execution policy supports the stencil pattern.
@@ -242,17 +243,24 @@ constexpr bool supports_divide_conquer<parallel_execution_sycl>() { return false
 template <>
 constexpr bool supports_pipeline<parallel_execution_sycl>() { return false; }
 
-
+//TODO Remove
+class myKernel;
 
 template <typename ... InputIterators, typename OutputIterator,
           typename Transformer>
-constexpr void parallel_execution_sycl::map(
+void parallel_execution_sycl::map(
     std::tuple<InputIterators...> firsts,
     OutputIterator first_out, 
     std::size_t sequence_size, 
     Transformer && transform_op) const
 {
-  std::cout << "SYCL MAP \n";
+  sycl::queue q{sycl::host_selector{}};
+  q.template submit([&] (sycl::handler &cgh) {
+    sycl::stream out(1024, 256, cgh);
+    cgh.single_task<myKernel>([=] {
+        out << "SYCL Works!" << sycl::endl;
+    });
+  });
 }
 
 template <typename InputIterator, typename Identity, typename Combiner>
@@ -263,7 +271,14 @@ constexpr auto parallel_execution_sycl::reduce(
     Combiner && combine_op) const
 {
   std::cout << "SYCL REDUCE \n";
-  return 1L; // Hard-Coded for add_sequence test
+
+  //TODO Remove placeholder
+  const auto last = std::next(first, sequence_size);
+  auto result{identity};
+  while (first != last) {
+    result = combine_op(result, *first++);
+  }
+  return result;
 }
 
 template <typename ... InputIterators, typename Identity, 
@@ -275,7 +290,15 @@ constexpr auto parallel_execution_sycl::map_reduce(
     Transformer && transform_op, Combiner && combine_op) const
 {
   std::cout << "SYCL MAP REDUCE \n";
-  return false;
+
+  //TODO Remove placeholder
+  const auto last = std::next(std::get<0>(firsts), sequence_size);
+  auto result{identity};
+  while (std::get<0>(firsts) != last) {
+    result = combine_op(result, apply_deref_increment(
+            std::forward<Transformer>(transform_op), firsts));
+  }
+  return result;
 }
 
 template <typename ... InputIterators, typename OutputIterator,
@@ -296,7 +319,20 @@ auto parallel_execution_sycl::divide_conquer(
     Solver && solve_op,
     Combiner && combine_op) const
 {
-  return false;
+  //TODO Remove Placeholder
+  if (predicate_op(input)) { return solve_op(std::forward<Input>(input)); }
+  auto subproblems = divide_op(std::forward<Input>(input));
+
+  using subproblem_type =
+  std::decay_t<typename std::result_of<Solver(Input)>::type>;
+  std::vector<subproblem_type> solutions;
+  for (auto && sp : subproblems) {
+    solutions.push_back(divide_conquer(sp,
+                                       std::forward<Divider>(divide_op), std::forward<Predicate>(predicate_op),std::forward<Solver>(solve_op),
+                                       std::forward<Combiner>(combine_op)));
+  }
+  return reduce(std::next(solutions.begin()), solutions.size()-1, solutions[0],
+                std::forward<Combiner>(combine_op));
 }
 
 template <typename Generator, typename ... Transformers>

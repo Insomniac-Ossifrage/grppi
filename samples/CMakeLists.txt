@@ -12,19 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Data-parallel patterns
-add_subdirectory(map)
-add_subdirectory(reduce)
-add_subdirectory(map-reduce)
-add_subdirectory(stencil)
+# TODO Find a different approach
+# SYCL Samples
+if (NOT GRPPI_SYCL_ENABLE)
+    # Data-parallel patterns
+    add_subdirectory(map)
+    add_subdirectory(reduce)
+    add_subdirectory(map-reduce)
+    add_subdirectory(stencil)
 
-# Task-parallel patterns
-add_subdirectory(divide-conquer)
+    # Task-parallel patterns
+    add_subdirectory(divide-conquer)
 
-# Streaming patterns
-add_subdirectory(pipeline)
-add_subdirectory(context)
-add_subdirectory(farm)
-add_subdirectory(stream-reduce)
-add_subdirectory(stream-filter)
-add_subdirectory(stream-iteration)
+    # Streaming patterns
+    add_subdirectory(pipeline)
+    add_subdirectory(context)
+    add_subdirectory(farm)
+    add_subdirectory(stream-reduce)
+    add_subdirectory(stream-filter)
+    add_subdirectory(stream-iteration)
+else()
+    add_subdirectory(sycl)
+endif()

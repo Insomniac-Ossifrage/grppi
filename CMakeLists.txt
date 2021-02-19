@@ -132,9 +132,27 @@ if(GRPPI_FF_ENABLE)
   endif()
 endif(GRPPI_FF_ENABLE)
 
-# SYCL Library
-add_definitions(-DGRPPI_SYCL)
-message(WARNING "Testing SYCL")
+# ComputeCpp SYCL Library
+find_package(ComputeCpp)
+if (COMPUTECPP_FOUND)
+  option(GRPPI_SYCL_ENABLE "Require ComputeCpp library" ON)
+  message(STATUS "ComputeCpp found")
+else()
+  option(GRPPI_SYCL_ENABLE "Require ComputeCpp library" OFF )
+  set(GRPPI_SYCL_ENABLE OFF CACHE BOOL "Require ComputeCpp library" FORCE)
+  message(STATUS "ComputeCpp not found")
+endif()
+
+message(STATUS "ComputeCpp SYCL: " ${GRPPI_SYCL_ENABLE})
+if(GRPPI_SYCL_ENABLE)
+  add_definitions(-DGRPPI_SYCL)
+  include_directories(${ComputeCpp_INCLUDE_DIRS})
+  #TODO Improve
+  set(SYCL_LANGUAGE_VERSION 2020)
+  set(CL_TARGET_OPENCL_VERSION 220)
+  add_compile_definitions(CL_TARGET_OPENCL_VERSION=${CL_TARGET_OPENCL_VERSION})
+endif()
+
 
 # Doxygen Documentation
 option( GRPPI_DOXY_ENABLE "Require Doxygen library" OFF )
