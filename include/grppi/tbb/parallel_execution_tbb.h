@@ -24,6 +24,9 @@
 #include "../common/patterns.h"
 #include "../common/farm_pattern.h"
 #include "../common/execution_traits.h"
+#include "../common/configuration.h"
+#include "../seq/sequential_execution.h"
+#include "../native/parallel_execution_native.h"
 
 #include <type_traits>
 #include <tuple>
@@ -242,6 +245,7 @@ public:
   \tparam Transformers Callable types for the transformers in the pipeline.
   \param generate_op Generator operation.
   \param transform_ops Transformer operations.
+  \note Uses parallel_execution_native until we fix OneTBB parallel integration.
   */
   template <typename Generator, typename ... Transformers>
   void pipeline(Generator && generate_op, 
@@ -256,11 +260,17 @@ public:
   \param input_queue Input stream communicator.
   \param transform_ops Transformer operations.
   \param output_queue Input stream communicator.
+  \note Uses parallel_execution_native until we fix OneTBB parallel integration.
   */
   template <typename InputType, typename Transformer, typename OutputType>
   void pipeline(mpmc_queue<InputType> & input_queue, Transformer && transform_op,
                 mpmc_queue<OutputType> & output_queue) const
   {
+    parallel_execution_native native;
+    native.template pipeline(input_queue,
+        std::forward<Transformer>(transform_op), output_queue);
+
+    /*
     ::std::atomic<long> order {0};
     pipeline(
       [&](){
@@ -274,11 +284,31 @@ public:
         order++;
       }
     );
-    output_queue.push(make_pair(typename OutputType::first_type{}, order.load())); 
-    //sequential_execution seq{};
-    //seq.pipeline(input_queue, std::forward<Transformer>(transform_op), output_queue);
+    output_queue.push(make_pair(typename OutputType::first_type{}, order.load()));
+    */
   }
 
+
+  /**
+  \brief Invoke \ref md_stream_pool.
+  \tparam Population Type for the initial population.
+  \tparam Selection Callable type for the selection operation.
+  \tparam Selection Callable type for the evolution operation.
+  \tparam Selection Callable type for the evaluation operation.
+  \tparam Selection Callable type for the termination operation.
+  \param population initial population.
+  \param selection_op Selection operation.
+  \param evolution_op Evolution operations.
+  \param eval_op Evaluation operation.
+  \param termination_op Termination operation.
+  */
+  template <typename Population, typename Selection, typename Evolution,
+            typename Evaluation, typename Predicate>
+  void stream_pool(Population & population,
+                Selection && selection_op,
+                Evolution && evolve_op,
+                Evaluation && eval_op,
+                Predicate && termination_op) const;
 
 private:
 
@@ -535,6 +565,13 @@ constexpr bool supports_divide_conquer<parallel_execution_tbb>() { return true; 
 template <>
 constexpr bool supports_pipeline<parallel_execution_tbb>() { return true; }
 
+/**
+\brief Determines if an execution policy supports the stream pool pattern.
+\note Specialization for parallel_execution_native.
+*/
+template <>
+constexpr bool supports_stream_pool<parallel_execution_tbb>() { return true; }
+
 template <typename ... InputIterators, typename OutputIterator, 
           typename Transformer>
 void parallel_execution_tbb::map(
@@ -679,6 +716,10 @@ void parallel_execution_tbb::pipeline(
     Generator && generate_op, 
     Transformers && ... transform_ops) const
 {
+  parallel_execution_native native;
+  native.pipeline(std::forward<Generator>(generate_op),
+      std::forward<Transformers>(transform_ops)...);
+  /*
   using namespace std;
 
   using result_type = decay_t<typename result_of<Generator()>::type>;
@@ -686,7 +727,7 @@ void parallel_execution_tbb::pipeline(
   using output_type = grppi::optional<output_value_type>;
 
   auto generator = tbb::make_filter<void, output_type>(
-    tbb::filter::serial_in_order, 
+    tbb::filter_mode::serial_in_order,
     [&](tbb::flow_control & fc) -> output_type {
       auto item =  generate_op();
       if (item) {
@@ -708,7 +749,90 @@ void parallel_execution_tbb::pipeline(
     generator
     & 
     rest);
+  */
 }
+
+template <typename Population, typename Selection, typename Evolution,
+          typename Evaluation, typename Predicate>
+void parallel_execution_tbb::stream_pool(Population & population,
+    Selection && selection_op,
+    Evolution && evolve_op,
+    Evaluation && eval_op,
+    Predicate && termination_op) const
+{
+
+  using namespace std;
+
+  using selected_type = typename std::result_of<Selection(Population&)>::type;
+  using individual_type = typename Population::value_type;
+  using selected_op_type = optional<selected_type>;
+  using individual_op_type = optional<individual_type>;
+  
+  if( population.size() == 0 ) return;
+
+  auto selected_queue = make_queue<selected_op_type>();
+  auto output_queue = make_queue<individual_op_type>();
+
+  std::atomic<bool> end{false};
+  std::atomic<int> done_threads{0};
+  std::atomic_flag lock = ATOMIC_FLAG_INIT;
+  tbb::task_group g;
+  
+  for(auto i = 0; i< concurrency_degree_-2; i++){
+    g.run( [&](){
+
+    auto selection = selected_queue.pop();
+    while(selection){
+      auto evolved = evolve_op(*selection);
+      auto filtered = eval_op(*selection, evolved);
+      if(termination_op(filtered)){
+        end = true;
+      }
+      output_queue.push({filtered});
+      selection = selected_queue.pop(); 
+    }
+     
+    done_threads++;
+    if(done_threads == concurrency_degree_-2){
+      output_queue.push(individual_op_type{});
+    }
+    
+   });
+  }
+
+  g.run([&](){
+    for(;;) {
+      if(end) break;
+      while(lock.test_and_set()); 
+
+      if( population.size() != 0 ){
+        auto selection = selection_op(population);
+        lock.clear();
+        selected_queue.push({selection});
+      }else{
+        lock.clear();
+      }
+
+    }
+    for(int i=0;i<concurrency_degree_-2;i++){ 
+      selected_queue.push(selected_op_type{});
+    }
+  });
+
+  g.run([&](){
+    auto item = output_queue.pop();
+    while(item) {
+      
+      while(lock.test_and_set());
+      population.push_back(*item);
+      lock.clear();
+
+      item = output_queue.pop();
+    }
+  });
+  g.wait();
+}
+
 
 // PRIVATE MEMBERS
 
@@ -831,7 +955,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, void>( 
-      tbb::filter::serial_in_order, 
+      tbb::filter_mode::serial_in_order,
       [=](input_type item) {
           if (item) transform_op(*item);
       });
@@ -858,7 +982,7 @@ auto parallel_execution_tbb::make_filter(
 
   return 
       tbb::make_filter<input_type, output_type>(
-          tbb::filter::serial_in_order, 
+          tbb::filter_mode::serial_in_order,
           [=](input_type item) -> output_type {
               if (item) return transform_op(*item);
               else return {};
@@ -880,7 +1004,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, void>(
-      tbb::filter::parallel,
+      tbb::filter_mode::parallel,
       [=](input_type item) {
         if (item) farm_obj(*item);
       });
@@ -906,7 +1030,7 @@ auto parallel_execution_tbb::make_filter(
   using output_type = grppi::optional<output_value_type>;
 
   return tbb::make_filter<input_type, output_type>(
-      tbb::filter::parallel,
+      tbb::filter_mode::parallel,
       [&](input_type item) -> output_type {
         if (item) return farm_obj(*item);
         else return {};
@@ -928,7 +1052,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, void>(
-      tbb::filter::parallel,
+      tbb::filter_mode::parallel,
       [=](input_type item) {
         if (item) filter_obj(*item);
       });
@@ -950,7 +1074,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, input_type>(
-      tbb::filter::parallel,
+      tbb::filter_mode::parallel,
       [&](input_type item) -> input_type {
         if (item && filter_obj(*item)) return item;
         else return {};
@@ -974,7 +1098,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, input_type>(
-      tbb::filter::serial,
+      tbb::filter_mode::serial_out_of_order,
       [&, it=std::vector<input_value_type>()](input_type item) -> input_type {
         if (!item) return {};
         reduce_obj.add_item(std::forward<Identity>(*item));
@@ -1004,7 +1128,7 @@ auto parallel_execution_tbb::make_filter(
   using input_type = grppi::optional<input_value_type>;
 
   return tbb::make_filter<input_type, input_type>(
-      tbb::filter::serial,
+      tbb::filter_mode::serial_out_of_order,
       [&](input_type item) -> input_type {
         if (!item) return {};
         do {
