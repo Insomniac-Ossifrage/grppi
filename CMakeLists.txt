@@ -133,6 +133,7 @@ if (GRPPI_FF_ENABLE)
 endif (GRPPI_FF_ENABLE)
 
 # ComputeCpp SYCL Library
+set(SYCL_LANGUAGE_VERSION 2020 CACHE STRING "" FORCE)
 find_package(ComputeCpp)
 if (COMPUTECPP_FOUND)
   option(GRPPI_SYCL_ENABLE "Require ComputeCpp library" ON)
@@ -148,7 +149,6 @@ if(GRPPI_SYCL_ENABLE)
   add_definitions(-DGRPPI_SYCL)
   include_directories(${ComputeCpp_INCLUDE_DIRS})
   #TODO Improve
-  set(SYCL_LANGUAGE_VERSION 2020)
   set(CL_TARGET_OPENCL_VERSION 220)
   add_compile_definitions(CL_TARGET_OPENCL_VERSION=${CL_TARGET_OPENCL_VERSION})
 endif()

@@ -21,7 +21,6 @@
 #include "../tbb/parallel_execution_tbb.h"
 #include "../omp/parallel_execution_omp.h"
 #include "../ff/parallel_execution_ff.h"
-#include "../sycl/parallel_execution_sycl.h"
 #include "../common/configuration.h"
 
 #include <memory>
@@ -49,9 +48,6 @@ public:
         break;
       case execution_backend::ff:
         execution_ = make_execution<parallel_execution_ff>();
-        break;
-      case execution_backend::sycl:
-        execution_ = make_execution<parallel_execution_sycl>();
         break;
     }
   }
@@ -335,20 +331,12 @@ GRPPI_TRY_PATTERN(parallel_execution_ff,PATTERN,__VA_ARGS__)
 #define GRPPI_TRY_PATTERN_FF(PATTERN,...)
 #endif
 
-#ifdef GRPPI_SYCL
-#define GRPPI_TRY_PATTERN_SYCL(PATTERN,...) \
-GRPPI_TRY_PATTERN(parallel_execution_sycl,PATTERN,__VA_ARGS__)
-#else
-#define GRPPI_TRY_PATTERN_SYCL(PATTERN,...)
-#endif
-
 #define GRPPI_TRY_PATTERN_ALL(...) \
 GRPPI_TRY_PATTERN(sequential_execution, __VA_ARGS__) \
 GRPPI_TRY_PATTERN(parallel_execution_native, __VA_ARGS__) \
 GRPPI_TRY_PATTERN_OMP(__VA_ARGS__) \
 GRPPI_TRY_PATTERN_TBB(__VA_ARGS__) \
 GRPPI_TRY_PATTERN_FF(__VA_ARGS__)  \
-GRPPI_TRY_PATTERN_SYCL(__VA_ARGS__) \
 GRPPI_PATTERN_NOT_IMPLEMENTED(__VA_ARGS__)\
 
 #define GRPPI_TRY_PATTERN_ALL_NOFF(...) \
@@ -356,7 +344,6 @@ GRPPI_TRY_PATTERN(sequential_execution, __VA_ARGS__) \
 GRPPI_TRY_PATTERN(parallel_execution_native, __VA_ARGS__) \
 GRPPI_TRY_PATTERN_OMP(__VA_ARGS__) \
 GRPPI_TRY_PATTERN_TBB(__VA_ARGS__) \
-GRPPI_TRY_PATTERN_SYCL(__VA_ARGS__) \
 GRPPI_PATTERN_NOT_IMPLEMENTED(__VA_ARGS__)\
 
 template <typename ... InputIterators, typename OutputIterator, 
@@ -465,7 +452,6 @@ void dynamic_execution::stream_pool(Population & population,
 #undef GRPPI_TRY_PATTERN
 #undef GRPPI_TRY_PATTERN_OMP
 #undef GRPPI_TRY_PATTERN_TBB
-#undef GRPPI_TRY_PATTERN_SYCL
 #undef GRPPI_TRY_PATTERN_ALL
 #undef GRPPI_TRY_PATTERN_ALL_NOFF
 
