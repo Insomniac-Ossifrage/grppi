@@ -243,8 +243,7 @@ constexpr bool supports_divide_conquer<parallel_execution_sycl>() { return false
 template <>
 constexpr bool supports_pipeline<parallel_execution_sycl>() { return false; }
 
-//TODO Remove
-class myKernel;
+class myKernel; //TODO Remove
 
 template <typename ... InputIterators, typename OutputIterator,
           typename Transformer>
@@ -254,35 +253,60 @@ void parallel_execution_sycl::map(
     std::size_t sequence_size, 
     Transformer && transform_op) const
 {
-  sycl::queue q{sycl::host_selector{}};
-  // TODO: Try to remove the extra iterator.
-  auto input_element{std::get<0>(firsts)};
-  using T = typename std::iterator_traits<decltype(input_element)>::value_type;
+  // SYCL Objects
+  auto exception_handler = [] (sycl::exception_list exceptions) {
+      for (std::exception_ptr const& e : exceptions) {
+        try {
+          std::rethrow_exception(e);
+        } catch(sycl::exception const& e) {
+          std::cout << "Caught asynchronous SYCL exception:\n"
+                    << e.get_cl_code() << std::endl;
+        }
+      }
+  };
+  sycl::queue sycl_queue{sycl::cpu_selector(), exception_handler};
+  if (!sycl_queue.is_host()) {
+    sycl::device b = sycl_queue.get_device();
+    std::cout << b.get_info<sycl::info::device::name>() << "\n";
+  }
 
-  std::tuple test = {std::apply([sequence_size](const auto&... inputs){
-    std::tuple collection = {sycl::buffer<T,1>(inputs, inputs + sequence_size)...};
+  auto lambda_transform = transform_op; // SYCL Can't capture transform_op directly, a copy is needed.
+
+  // Input Iterators
+  using T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
+  std::array in_buffers = {std::apply([sequence_size](const auto&... inputs){
+    std::array collection{sycl::buffer<T,1>{inputs, inputs + sequence_size}...};
     return collection;
     }, firsts)};
-
 
   // Output Iterator
   using Out_T = typename std::iterator_traits<OutputIterator>::value_type;
   sycl::buffer<Out_T, 1> out_buffer{first_out, first_out + sequence_size};
 
-  // Buffers
-  sycl::buffer<T, 1> buffer{input_element, input_element + sequence_size};
-
   // Queue
-  q.template submit([&](sycl::handler &cgh) {
-      auto acc = buffer.template get_access<sycl::access::mode::read, sycl::access::target::constant_buffer>(cgh);
-      auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
-      cl::sycl::stream os(1024, 128, cgh);
-      // TODO Move kernel to template class
-      cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
-          out_acc[index] = acc[index] + 1;
-      });
+  sycl_queue.template submit([&](sycl::handler &cgh) {
+    // Input Accessors
+    std::array in_accs = {std::apply([&] (auto&... buffers) {
+      std::array accessors{buffers.template get_access<sycl::access::mode::read>(cgh)...};
+      return accessors;
+      },in_buffers)};
+    // Output Accessor
+    auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
+    // TODO Move kernel to template class
+    cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
+        out_acc[index] = std::apply([&](const auto &...accessors){
+          return lambda_transform(accessors[index]...);
+          }, in_accs);
+    });
   });
-  q.wait();
+  // TODO: Handle Exceptions
+  try {
+    sycl_queue.wait_and_throw();
+  } catch (sycl::exception const& e) {
+    std::cout << "Caught synchronous SYCL exception:\n"
+              << e.what() << std::endl;
+  }
+
   // Write back to OutputIterator
   out_buffer.template set_final_data(first_out);
 }
