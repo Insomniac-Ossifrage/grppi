@@ -32,7 +32,6 @@ enum class execution_backend {
   omp,
   tbb,
   ff,
-  sycl
 };
 
 inline std::ostream & operator<<(std::ostream & os, execution_backend be) {
@@ -158,9 +157,6 @@ public:
      }
      else if (std::strcmp("ff", str) == 0) {
        dynamic_backend_ = execution_backend::ff;
-     }
-     else if (std::strcmp("sycl", str) == 0) {
-       dynamic_backend_ = execution_backend::sycl;
      }
      else {
        std::cerr << "GrPPI: Invalid backend \"" << str << "\"\n";

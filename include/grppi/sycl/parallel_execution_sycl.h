@@ -255,12 +255,25 @@ void parallel_execution_sycl::map(
     Transformer && transform_op) const
 {
   sycl::queue q{sycl::host_selector{}};
-  q.template submit([&] (sycl::handler &cgh) {
-    sycl::stream out(1024, 256, cgh);
-    cgh.single_task<myKernel>([=] {
-        out << "SYCL Works!" << sycl::endl;
-    });
+  // TODO: Try to remove the extra iterator.
+  auto input_element{std::get<0>(firsts)};
+  using T = typename std::iterator_traits<decltype(input_element)>::value_type;
+
+  // Output Iterator
+  using Out_T = typename std::iterator_traits<OutputIterator>::value_type;
+  // Buffers
+  sycl::buffer<T, 1> buffer{input_element, input_element + sequence_size};
+  sycl::buffer<Out_T, 1> out_buffer{first_out, first_out + sequence_size};
+  q.template submit([&](sycl::handler &cgh) {
+      auto acc = buffer.template get_access<sycl::access::mode::read, sycl::access::target::constant_buffer>(cgh);
+      auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
+      cl::sycl::stream os(1024, 128, cgh);
+      cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
+          out_acc[index] = acc[index] + 1;
+      });
   });
+  q.wait();
+  out_buffer.template set_final_data(first_out);
 }
 
 template <typename InputIterator, typename Identity, typename Combiner>

@@ -26,9 +26,9 @@
 #include "grppi/grppi.h"
 
 // Samples shared utilities
-#include "../../../util/util.h"
+#include "grppi/sycl/parallel_execution_sycl.h"
 
-void test_map(grppi::dynamic_execution & e, int n) {
+void test_map(grppi::parallel_execution_sycl & e, int n) {
   using namespace std;
 
   vector<int> v1;
@@ -56,8 +56,6 @@ void print_message(const std::string & prog, const std::string & msg) {
   cerr << msg << endl;
   cerr << "Usage: " << prog << " size mode" << endl;
   cerr << "  size: Integer value with problem size" << endl;
-  cerr << "  mode:" << endl;
-  print_available_modes(cerr);
 }
 
 
@@ -65,7 +63,7 @@ int main(int argc, char **argv) {
     
   using namespace std;
 
-  if(argc < 3){
+  if(argc < 2){
     print_message(argv[0], "Invalid number of arguments.");
     return -1;
   }
@@ -76,10 +74,8 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if (!run_test(argv[2], test_map, n)) {
-    print_message(argv[0], "Invalid policy.");
-    return -1;
-  }
+  auto ex = grppi::parallel_execution_sycl{};
+  test_map(ex, n);
 
   return 0;
 }

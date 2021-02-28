@@ -29,3 +29,7 @@ add_subdirectory(stream-reduce)
 add_subdirectory(stream-filter)
 add_subdirectory(stream-iteration)
 add_subdirectory(stream-pool)
+
+if(GRPPI_SYCL_ENABLE)
+    add_subdirectory(sycl)
+endif()
