@@ -259,20 +259,31 @@ void parallel_execution_sycl::map(
   auto input_element{std::get<0>(firsts)};
   using T = typename std::iterator_traits<decltype(input_element)>::value_type;
 
+  std::tuple test = {std::apply([sequence_size](const auto&... inputs){
+    std::tuple collection = {sycl::buffer<T,1>(inputs, inputs + sequence_size)...};
+    return collection;
+    }, firsts)};
+
+
   // Output Iterator
   using Out_T = typename std::iterator_traits<OutputIterator>::value_type;
+  sycl::buffer<Out_T, 1> out_buffer{first_out, first_out + sequence_size};
+
   // Buffers
   sycl::buffer<T, 1> buffer{input_element, input_element + sequence_size};
-  sycl::buffer<Out_T, 1> out_buffer{first_out, first_out + sequence_size};
+
+  // Queue
   q.template submit([&](sycl::handler &cgh) {
       auto acc = buffer.template get_access<sycl::access::mode::read, sycl::access::target::constant_buffer>(cgh);
       auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
       cl::sycl::stream os(1024, 128, cgh);
+      // TODO Move kernel to template class
       cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
           out_acc[index] = acc[index] + 1;
       });
   });
   q.wait();
+  // Write back to OutputIterator
   out_buffer.template set_final_data(first_out);
 }
 
