@@ -254,7 +254,7 @@ void parallel_execution_sycl::map(
     Transformer && transform_op) const
 {
   // SYCL Objects
-  auto exception_handler = [] (sycl::exception_list exceptions) {
+  auto exception_handler = [] (const sycl::exception_list& exceptions) {
       for (std::exception_ptr const& e : exceptions) {
         try {
           std::rethrow_exception(e);
@@ -286,17 +286,25 @@ void parallel_execution_sycl::map(
   // Queue
   sycl_queue.template submit([&](sycl::handler &cgh) {
     // Input Accessors
-    std::array in_accs = {std::apply([&] (auto&... buffers) {
+      std::array in_accs = {std::apply([&] (auto&... buffers) {
       std::array accessors{buffers.template get_access<sycl::access::mode::read>(cgh)...};
       return accessors;
       },in_buffers)};
+
+    // Test
+      using Accessor = sycl::accessor<int, 1, sycl::access::mode::read, sycl::access::target::global_buffer>;
+      Accessor testACC[] = {in_accs[0]};
+
     // Output Accessor
     auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
+
+    //Debug
+    sycl::stream os(1024, 128, cgh);
     // TODO Move kernel to template class
     cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
         out_acc[index] = std::apply([&](const auto &...accessors){
-          return lambda_transform(accessors[index]...);
-          }, in_accs);
+            return lambda_transform(accessors[index]...);
+        }, in_accs);
     });
   });
   // TODO: Handle Exceptions

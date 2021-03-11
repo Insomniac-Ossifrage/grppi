@@ -132,25 +132,44 @@ if (GRPPI_FF_ENABLE)
   endif ()
 endif (GRPPI_FF_ENABLE)
 
-# ComputeCpp SYCL Library
-set(SYCL_LANGUAGE_VERSION 2020 CACHE STRING "" FORCE)
+# SYCL Library
+set(SYCL_LANGUAGE_VERSION 202001 CACHE STRING "" FORCE)
+# Intel Compiler
+if (${CMAKE_CXX_COMPILER} MATCHES "/opt/intel/oneapi/compiler/(.)+/linux/bin/dpcpp")
+  set(GRPPI_SYCL_DPCPP_FOUND ON CACHE INTERNAL "DPC++ compiler found")
+  message(STATUS "SYCL: DPC++ found")
+else()
+  set(GRPPI_SYCL_DPCPP_FOUND OFF CACHE INTERNAL "DPC++ compiler found")
+endif()
+# ComputeCpp Compiler
 find_package(ComputeCpp)
 if (COMPUTECPP_FOUND)
-  option(GRPPI_SYCL_ENABLE "Require ComputeCpp library" ON)
-  message(STATUS "ComputeCpp found")
+  message(STATUS "SYCL: ComputeCpp found")
+endif()
+# SYCL Compiler
+if (GRPPI_SYCL_DPCPP_FOUND OR COMPUTECPP_FOUND)
+  option(GRPPI_SYCL_ENABLE "Require SYCL compiler" ON)
 else()
-  option(GRPPI_SYCL_ENABLE "Require ComputeCpp library" OFF )
-  set(GRPPI_SYCL_ENABLE OFF CACHE BOOL "Require ComputeCpp library" FORCE)
-  message(STATUS "ComputeCpp not found")
+  option(GRPPI_SYCL_ENABLE "Require SYCL compiler" OFF)
+  set(GRPPI_SYCL_ENABLE OFF CACHE BOOL "Require SYCL compiler" FORCE)
+  message(STATUS "SYCL compiler not found")
+endif()
+# Multiple compiler warning
+if (GRPPI_SYCL_DPCPP_FOUND AND COMPUTECPP_FOUND)
+  message(WARNING "SYCL: Multiple compilers found. This may cause redefinition errors")
 endif()
 
-message(STATUS "ComputeCpp SYCL: " ${GRPPI_SYCL_ENABLE})
+message(STATUS "SYCL Compiler: " ${GRPPI_SYCL_ENABLE})
 if(GRPPI_SYCL_ENABLE)
   add_definitions(-DGRPPI_SYCL)
-  include_directories(${ComputeCpp_INCLUDE_DIRS})
+  if (COMPUTECPP_FOUND)
+    include_directories(${ComputeCpp_INCLUDE_DIRS})
+  endif ()
   #TODO Improve
   set(CL_TARGET_OPENCL_VERSION 220)
   add_compile_definitions(CL_TARGET_OPENCL_VERSION=${CL_TARGET_OPENCL_VERSION})
+  #add_compile_options(-fsycl-targets=amdgcn-unknown-unknown-sycldevice)
+  #add_compile_options(-fPIC)
 endif()
 
 

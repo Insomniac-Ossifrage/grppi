@@ -14,7 +14,9 @@
 
 add_executable(sycl_add_sequences main.cpp)
 
-add_sycl_to_target(TARGET sycl_add_sequences SOURCES main.cpp)
+if (COMPUTECPP_FOUND)
+    add_sycl_to_target(TARGET sycl_add_sequences SOURCES main.cpp)
+endif()
 
 target_link_libraries(sycl_add_sequences
   ${CMAKE_THREAD_LIBS_INIT} 
