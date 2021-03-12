@@ -291,15 +291,9 @@ void parallel_execution_sycl::map(
       return accessors;
       },in_buffers)};
 
-    // Test
-      using Accessor = sycl::accessor<int, 1, sycl::access::mode::read, sycl::access::target::global_buffer>;
-      Accessor testACC[] = {in_accs[0]};
-
     // Output Accessor
-    auto out_acc = out_buffer.template get_access<sycl::access::mode::write>(cgh);
+    auto out_acc{out_buffer.template get_access<sycl::access::mode::write>(cgh)};
 
-    //Debug
-    sycl::stream os(1024, 128, cgh);
     // TODO Move kernel to template class
     cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
         out_acc[index] = std::apply([&](const auto &...accessors){
@@ -327,7 +321,6 @@ constexpr auto parallel_execution_sycl::reduce(
     Combiner && combine_op) const
 {
   std::cout << "SYCL REDUCE \n";
-
   //TODO Remove placeholder
   const auto last = std::next(first, sequence_size);
   auto result{identity};
