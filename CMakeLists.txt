@@ -132,7 +132,10 @@ if (GRPPI_FF_ENABLE)
   endif ()
 endif (GRPPI_FF_ENABLE)
 
-# SYCL Library
+
+#[[
+  SYCL backend configuration
+]]
 set(SYCL_LANGUAGE_VERSION 202001 CACHE STRING "" FORCE)
 # Intel Compiler
 if (${CMAKE_CXX_COMPILER} MATCHES "/opt/intel/oneapi/compiler/(.)+/linux/bin/dpcpp")
@@ -158,7 +161,8 @@ else()
   set(GRPPI_SYCL_ENABLE OFF CACHE BOOL "Require SYCL compiler" FORCE)
   message(STATUS "SYCL compiler not found")
 endif()
-# Multiple compiler warning
+# Multiple compilers warning
+# TODO Improve
 if (GRPPI_SYCL_DPCPP_FOUND AND COMPUTECPP_FOUND)
   message(WARNING "SYCL: Multiple compilers found. This may cause redefinition errors")
 endif()

@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <tuple>
 #include <iterator>
+#include <functional>
 #include <CL/sycl.hpp>
 
 namespace grppi {
@@ -38,37 +39,7 @@ class parallel_execution_sycl {
 public:
 
   /// \brief Default constructor.
-  constexpr parallel_execution_sycl() noexcept = default;
-
-  /**
-  \brief Set number of grppi threads.
-  \note Setting concurrency degree is ignored for sequential execution.
-  */
-  constexpr void set_concurrency_degree(int) const noexcept {}
-
-  /**
-  \brief Get number of grppi threads.
-  \note Getting concurrency degree is always 1 for sequential execution.
-  */
-  constexpr int concurrency_degree() const noexcept { return 1; }
-
-  /**
-  \brief Enable ordering.
-  \note Enabling ordering of sequential execution is always ignored.
-  */
-  constexpr void enable_ordering() const noexcept {}
-
-  /**
-  \brief Disable ordering.
-  \note Disabling ordering of sequential execution is always ignored.
-  */
-  constexpr void disable_ordering() const noexcept {}
-
-  /**
-  \brief Is execution ordered.
-  \note Sequential execution is always ordered.
-  */
-  constexpr bool is_ordered() const noexcept { return true; }
+  parallel_execution_sycl(): queue_{sycl::cpu_selector{}} {};
 
   /**
   \brief Applies a transformation to multiple sequences leaving the result in
@@ -185,6 +156,7 @@ public:
                 Transformers && ... transform_op) const;
 
 private:
+    sycl::queue queue_;
 
 };
 
@@ -213,7 +185,7 @@ constexpr bool supports_map<parallel_execution_sycl>() { return true; }
 \note Specialization for sequential_execution.
 */
 template <>
-constexpr bool supports_reduce<parallel_execution_sycl>() { return false; }
+constexpr bool supports_reduce<parallel_execution_sycl>() { return true; }
 
 /**
 \brief Determines if an execution policy supports the map-reduce pattern.
@@ -320,13 +292,23 @@ constexpr auto parallel_execution_sycl::reduce(
     Identity && identity,
     Combiner && combine_op) const
 {
-  std::cout << "SYCL REDUCE \n";
-  //TODO Remove placeholder
-  const auto last = std::next(first, sequence_size);
-  auto result{identity};
-  while (first != last) {
-    result = combine_op(result, *first++);
-  }
+  // Input Iterator
+  using T = typename std::iterator_traits<InputIterator>::value_type;
+  sycl::buffer<T, 1> in_buffer{first, first + sequence_size};
+  // Output Value
+  T result = identity;
+  sycl::buffer<T, 1> res_buffer{&result, sycl::range<1>(1)};
+  // Queue
+  const_cast<sycl::queue &>(queue_).template submit([&](sycl::handler &cgh) {
+    auto in_acc = in_buffer.template get_access<sycl::access::mode::read>(cgh);
+    auto op_reduction = sycl::reduction(res_buffer, cgh, identity, combine_op);
+    cgh.template parallel_for<class MyReduction>(sycl::nd_range<1>{sequence_size, sequence_size}, op_reduction, [=](sycl::nd_item<1> idx, auto &op) {
+       int i = idx.get_global_id(0);
+       op.combine(in_acc[i]);
+     });
+  });
+  const_cast<sycl::queue &>(queue_).wait();
+
   return result;
 }
 
