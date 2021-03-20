@@ -176,10 +176,15 @@ if(GRPPI_SYCL_ENABLE)
   if (GRPPI_SYCL_CUSTOM_COMPILER)
     include_directories(${GRPPI_SYCL_CUSTOM_INCLUDE_DIRS})
   endif()
-  list(APPEND CMAKE_CXX_FLAGS ${GRPPI_SYCL_CUSTOM_FLAGS})
-  #TODO Improve
-  set(CL_TARGET_OPENCL_VERSION 220)
-  add_compile_definitions(CL_TARGET_OPENCL_VERSION=${CL_TARGET_OPENCL_VERSION})
+  # Custom compile flags
+  list(APPEND CMAKE_CXX_FLAGS ${GRPPI_SYCL_CUSTOM_FLAGS}) # Needed for -fsycl
+  # Custom compile definitions
+  set(GRPPI_SYCL_OPENCL_VERSION 300 CACHE STRING "OpenCL Version")
+  add_compile_definitions(CL_TARGET_OPENCL_VERSION=${GRPPI_SYCL_OPENCL_VERSION})
+  option(GRPPI_SYCL_EXPERIMENTAL_REDUCTION "Enable SYCL 2020 reduction" OFF)
+  if (GRPPI_SYCL_EXPERIMENTAL_REDUCTION)
+    add_compile_definitions(GRPPI_SYCL_EXPERIMENTAL_REDUCTION)
+  endif()
 endif()
 
 

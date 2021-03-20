@@ -285,32 +285,60 @@ void parallel_execution_sycl::map(
   out_buffer.template set_final_data(first_out);
 }
 
+#ifdef GRPPI_SYCL_EXPERIMENTAL_REDUCTION
 template <typename InputIterator, typename Identity, typename Combiner>
-constexpr auto parallel_execution_sycl::reduce(
+ constexpr auto parallel_execution_sycl::reduce(
     InputIterator first, 
     std::size_t sequence_size,
     Identity && identity,
     Combiner && combine_op) const
 {
-  // Input Iterator
-  using T = typename std::iterator_traits<InputIterator>::value_type;
-  sycl::buffer<T, 1> in_buffer{first, first + sequence_size};
   // Output Value
+  using T = typename std::iterator_traits<InputIterator>::value_type;
   T result = identity;
-  sycl::buffer<T, 1> res_buffer{&result, sycl::range<1>(1)};
-  // Queue
-  const_cast<sycl::queue &>(queue_).template submit([&](sycl::handler &cgh) {
-    auto in_acc = in_buffer.template get_access<sycl::access::mode::read>(cgh);
-    auto op_reduction = sycl::reduction(res_buffer, cgh, identity, combine_op);
-    cgh.template parallel_for<class MyReduction>(sycl::nd_range<1>{sequence_size, sequence_size}, op_reduction, [=](sycl::nd_item<1> idx, auto &op) {
-       int i = idx.get_global_id(0);
-       op.combine(in_acc[i]);
-     });
-  });
-  const_cast<sycl::queue &>(queue_).wait();
+  {
+    // Buffers
+    sycl::buffer<T, 1> res_buffer{&result, 1};
+    sycl::buffer<T, 1> in_buffer{first, first + sequence_size};
+    // Reduction Parameters
+    //TODO Adjust Size Function
+    unsigned long max_workgroup_size{queue_.get_device().template get_info<sycl::info::device::max_work_group_size>() / sizeof(T) * 2};
+    if (max_workgroup_size == 0) max_workgroup_size++;
+    unsigned long remaining_workitems{sequence_size};
+    unsigned long offset{0};
+    do {
+      unsigned long current_worksgroup_size = std::min(max_workgroup_size, remaining_workitems);
+      remaining_workitems -= current_worksgroup_size;
+      // Queue
+      const_cast<sycl::queue &>(queue_).template submit([&](sycl::handler &cgh) {
+          auto in_acc = in_buffer.template get_access<sycl::access::mode::read>(cgh, sycl::range<1>{current_worksgroup_size}, sycl::id<1>{offset});
+          auto op_reduction = sycl::reduction(res_buffer, cgh, identity, combine_op);
+          cgh.template parallel_for<class MyReduction>(
+                  sycl::nd_range<1>{current_worksgroup_size, current_worksgroup_size}, op_reduction,
+                  [=](sycl::nd_item<1> idx, auto &op) {
+                      op.combine(in_acc[idx.get_global_linear_id()]);
+                  });
+      });
+      // TODO Error Handling
+      const_cast<sycl::queue &>(queue_).wait();
+      offset += current_worksgroup_size;
+    } while (remaining_workitems > 0);
+  } // Wait for buffer destruction.
 
   return result;
 }
+#else
+  template <typename InputIterator, typename Identity, typename Combiner>
+  constexpr auto parallel_execution_sycl::reduce(
+    InputIterator first,
+    std::size_t sequence_size,
+    Identity && identity,
+    Combiner && combine_op) const
+{
+  std::cout << CL_TARGET_OPENCL_VERSION << std::endl;
+  return identity;
+}
+#endif
 
 template <typename ... InputIterators, typename Identity, 
           typename Transformer, typename Combiner>
