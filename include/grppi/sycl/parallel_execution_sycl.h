@@ -215,8 +215,6 @@ constexpr bool supports_divide_conquer<parallel_execution_sycl>() { return false
 template <>
 constexpr bool supports_pipeline<parallel_execution_sycl>() { return false; }
 
-class myKernel; //TODO Remove
-
 template <typename ... InputIterators, typename OutputIterator,
           typename Transformer>
 void parallel_execution_sycl::map(
@@ -267,7 +265,7 @@ void parallel_execution_sycl::map(
     auto out_acc{out_buffer.template get_access<sycl::access::mode::write>(cgh)};
 
     // TODO Move kernel to template class
-    cgh.template parallel_for<myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
+    cgh.template parallel_for<class myKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
         out_acc[index] = std::apply([&](const auto &...accessors){
             return lambda_transform(accessors[index]...);
         }, in_accs);
@@ -287,8 +285,8 @@ void parallel_execution_sycl::map(
 
 #ifdef GRPPI_SYCL_EXPERIMENTAL_REDUCTION
 template <typename InputIterator, typename Identity, typename Combiner>
- constexpr auto parallel_execution_sycl::reduce(
-    InputIterator first, 
+constexpr auto parallel_execution_sycl::reduce(
+    InputIterator first,
     std::size_t sequence_size,
     Identity && identity,
     Combiner && combine_op) const
@@ -301,8 +299,8 @@ template <typename InputIterator, typename Identity, typename Combiner>
     sycl::buffer<T, 1> res_buffer{&result, 1};
     sycl::buffer<T, 1> in_buffer{first, first + sequence_size};
     // Reduction Parameters
-    //TODO Adjust Size Function
-    unsigned long max_workgroup_size{queue_.get_device().template get_info<sycl::info::device::max_work_group_size>() / sizeof(T) * 2};
+    // TODO Review ND-Range parameters for better parallelism
+    unsigned long max_workgroup_size{queue_.get_device().template get_info<sycl::info::device::max_work_group_size>()/12};
     if (max_workgroup_size == 0) max_workgroup_size++;
     unsigned long remaining_workitems{sequence_size};
     unsigned long offset{0};
@@ -313,8 +311,8 @@ template <typename InputIterator, typename Identity, typename Combiner>
       const_cast<sycl::queue &>(queue_).template submit([&](sycl::handler &cgh) {
           auto in_acc = in_buffer.template get_access<sycl::access::mode::read>(cgh, sycl::range<1>{current_worksgroup_size}, sycl::id<1>{offset});
           auto op_reduction = sycl::reduction(res_buffer, cgh, identity, combine_op);
-          cgh.template parallel_for<class MyReduction>(
-                  sycl::nd_range<1>{current_worksgroup_size, current_worksgroup_size}, op_reduction,
+          // TODO Kernel Name
+          cgh.template parallel_for<class ReductionKernel>(sycl::nd_range<1>{current_worksgroup_size, current_worksgroup_size}, op_reduction,
                   [=](sycl::nd_item<1> idx, auto &op) {
                       op.combine(in_acc[idx.get_global_linear_id()]);
                   });
@@ -328,14 +326,13 @@ template <typename InputIterator, typename Identity, typename Combiner>
   return result;
 }
 #else
-  template <typename InputIterator, typename Identity, typename Combiner>
-  constexpr auto parallel_execution_sycl::reduce(
+template <typename InputIterator, typename Identity, typename Combiner>
+constexpr auto parallel_execution_sycl::reduce(
     InputIterator first,
     std::size_t sequence_size,
     Identity && identity,
     Combiner && combine_op) const
 {
-  std::cout << CL_TARGET_OPENCL_VERSION << std::endl;
   return identity;
 }
 #endif
