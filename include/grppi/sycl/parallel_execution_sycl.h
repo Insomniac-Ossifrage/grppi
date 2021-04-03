@@ -27,10 +27,9 @@
 #include <tuple>
 #include <iterator>
 #include <functional>
-#include <CL/sycl.hpp>
+#include "kernels/sycl_kernels.h"
 
 namespace grppi {
-
 /**
 \brief SYCL Parallel execution policy.
 */
@@ -39,13 +38,13 @@ class parallel_execution_sycl {
 public:
 
   /// \brief Default constructor.
-  parallel_execution_sycl(): queue_{sycl::cpu_selector{}, [](const sycl::exception_list &exceptions) {
+  parallel_execution_sycl(): queue_{sycl::host_selector{}, [](const sycl::exception_list &exceptions) {
     for (std::exception_ptr const &e : exceptions) {
       try {
         std::rethrow_exception(e);
       } catch (sycl::exception const &e) {
         std::cout << "Caught asynchronous SYCL exception:\n" << e.what() << std::endl;
-        std::cout << e.get_cl_error_message() << std::endl;
+        std::cout << e.what() << std::endl;
       }
     }}} {};
 
@@ -165,6 +164,7 @@ public:
 
 private:
     sycl::queue queue_;
+    size_t work_group_load_ = 256;
 
 };
 
@@ -200,7 +200,7 @@ constexpr bool supports_reduce<parallel_execution_sycl>() { return true; }
 \note Specialization for sequential_execution.
 */
 template <>
-constexpr bool supports_map_reduce<parallel_execution_sycl>() { return false; }
+constexpr bool supports_map_reduce<parallel_execution_sycl>() { return true; }
 
 /**
 \brief Determines if an execution policy supports the stencil pattern.
@@ -223,8 +223,6 @@ constexpr bool supports_divide_conquer<parallel_execution_sycl>() { return false
 template <>
 constexpr bool supports_pipeline<parallel_execution_sycl>() { return false; }
 
-class MapKernel;
-
 template <typename ... InputIterators, typename OutputIterator,
           typename Transformer>
 void parallel_execution_sycl::map(
@@ -233,69 +231,24 @@ void parallel_execution_sycl::map(
     std::size_t sequence_size, 
     Transformer && transform_op) const
 {
-  // SYCL Objects
-  auto exception_handler = [] (const sycl::exception_list& exceptions) {
-      for (std::exception_ptr const& e : exceptions) {
-        try {
-          std::rethrow_exception(e);
-        } catch(sycl::exception const& e) {
-          std::cout << "Caught asynchronous SYCL exception:\n"
-                    << e.get_cl_code() << std::endl;
-        }
-      }
-  };
-  sycl::queue sycl_queue{sycl::cpu_selector(), exception_handler};
-  if (!sycl_queue.is_host()) {
-    sycl::device b = sycl_queue.get_device();
-    std::cout << b.get_info<sycl::info::device::name>() << "\n";
-  }
-
-  auto lambda_transform = transform_op; // SYCL Can't capture transform_op directly, a copy is needed.
-
+  using Input_T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type;
+  using Output_T = typename std::iterator_traits<OutputIterator>::value_type;
   // Input Iterators
-  using T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
   std::array in_buffers = {std::apply([sequence_size](const auto&... inputs){
-    std::array collection{sycl::buffer<T,1>{inputs, inputs + sequence_size}...};
+    std::array collection{sycl::buffer<Input_T,1>{inputs, inputs + sequence_size}...};
     return collection;
     }, firsts)};
-
   // Output Iterator
-  using Out_T = typename std::iterator_traits<OutputIterator>::value_type;
-  sycl::buffer<Out_T, 1> out_buffer{first_out, first_out + sequence_size};
-
-  // Queue
-  sycl_queue.template submit([&](sycl::handler &cgh) {
-    // Input Accessors
-      std::array in_accs = {std::apply([&] (auto&... buffers) {
-      std::array accessors{buffers.template get_access<sycl::access::mode::read>(cgh)...};
-      return accessors;
-      },in_buffers)};
-
-    // Output Accessor
-    auto out_acc{out_buffer.template get_access<sycl::access::mode::write>(cgh)};
-
-    // TODO Move kernel to template class
-    cgh.template parallel_for<MapKernel>(sycl::range<1>{sequence_size}, [=](sycl::id<1> index) {
-        out_acc[index] = std::apply([&](const auto &...accessors){
-            return lambda_transform(accessors[index]...);
-        }, in_accs);
-    });
-  });
-  // TODO: Handle Exceptions
-  try {
-    sycl_queue.wait_and_throw();
-  } catch (sycl::exception const& e) {
-    std::cout << "Caught synchronous SYCL exception:\n"
-              << e.what() << std::endl;
-  }
-
+  sycl::buffer<Output_T , 1> out_buffer{first_out, first_out + sequence_size};
+  // Kernel Call
+  sycl_kernel::template map<Output_T , in_buffers.size()>(queue_, sequence_size, in_buffers, out_buffer, transform_op);
   // Write back to OutputIterator
   out_buffer.template set_final_data(first_out);
 }
 
 #ifdef GRPPI_SYCL_EXPERIMENTAL_REDUCTION
 template <typename InputIterator, typename Identity, typename Combiner>
-constexpr auto parallel_execution_sycl::reduce(
+auto parallel_execution_sycl::reduce(
     InputIterator first,
     std::size_t sequence_size,
     Identity && identity,
@@ -343,11 +296,8 @@ auto parallel_execution_sycl::reduce(
     Identity && identity,
     Combiner && combine_op) const
 {
-  // TODO Adjust for odd case
-  // TODO Adjust for sequence_size < work_group_load
   // Parameters
-  static constexpr size_t work_group_load = 256;
-  static constexpr size_t k_factor = 2;
+  const constexpr size_t k_factor = 2;
   // R-Value copies
   Identity identity_copy = identity;
   Combiner combine_op_copy = combine_op;
@@ -360,14 +310,13 @@ auto parallel_execution_sycl::reduce(
     sycl::buffer<T, 1> out_buffer{&result, sycl::range<1>(1)};
     in_buffer.template set_final_data(nullptr);
     // Data
-    const constexpr size_t local_size = work_group_load / k_factor;
+    const size_t local_size = work_group_load_ / k_factor;
     const size_t global_size = (((sequence_size/k_factor) + local_size - 1) / local_size) * local_size;
     size_t num_workgroups = global_size / local_size;
     // Conditional buffer
     auto temp_buffer = (num_workgroups > 1) ? sycl::buffer<T,1>{sycl::range<1>(num_workgroups)} : out_buffer;
 
     const_cast<sycl::queue &>(queue_).template submit([&](sycl::handler &cgh) {
-      sycl::stream os(1024, 128, cgh);
       // Accessors
       auto in_acc = in_buffer.template get_access<sycl::access::mode::read>(cgh);
       auto temp_acc = temp_buffer.template get_access<sycl::access::mode::write>(cgh);
@@ -379,14 +328,14 @@ auto parallel_execution_sycl::reduce(
         size_t local_id = item.get_local_id(0);
         Identity private_memory = identity_copy;
         // Thread Reduction
-        // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2 or smaller by factor of K
+        // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2
         for (size_t i = global_id; i < sequence_size; i+= item.get_global_range(0)) {
           private_memory += ((i < sequence_size) ? in_acc[i] : identity_copy);
         }
         local_acc[local_id] = private_memory;
         // Stride
         // The input accessor must have even elements or the last element won't be reduced
-        for (size_t i = item.get_local_range(0) / 2; i > 0; i >>= 1) {
+        for (size_t i = local_size / 2; i > 0; i >>= 1) {
           // Local barrier for items in work group
           // TODO Update to SYCL 2020 function as this one is deprecated.
           item.barrier(sycl::access::fence_space::local_space);
@@ -405,20 +354,16 @@ auto parallel_execution_sycl::reduce(
     std::cout << "WAITED \n";
 
     // Remaining reduction
+    // TODO Implement parallel reduction for larger cases
     if (num_workgroups > 1) {
       auto host_out_acc = out_buffer.template get_access<cl::sycl::access::mode::write>();
       auto host_in_acc = temp_buffer.template get_access<cl::sycl::access::mode::read>();
-      // reduce the remaining on the host
+      // Host reduction
       for (size_t i = 0; i < num_workgroups; i++) {
         host_out_acc[0] += host_in_acc[i];
       }
+      result = host_out_acc[0];
     }
-
-    {
-      auto hI = in_buffer.template get_access<cl::sycl::access::mode::read>();
-      result = hI[0];
-    }
-
 
   }
   return result;
@@ -433,16 +378,13 @@ constexpr auto parallel_execution_sycl::map_reduce(
     Identity && identity,
     Transformer && transform_op, Combiner && combine_op) const
 {
-  std::cout << "SYCL MAP REDUCE \n";
-
-  //TODO Remove placeholder
-  const auto last = std::next(std::get<0>(firsts), sequence_size);
-  auto result{identity};
-  while (std::get<0>(firsts) != last) {
-    result = combine_op(result, apply_deref_increment(
-            std::forward<Transformer>(transform_op), firsts));
-  }
-  return result;
+  // Input iterators to SYCL buffers
+  using T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
+  std::array in_buffers = {std::apply([sequence_size](const auto&... inputs){
+      std::array collection{sycl::buffer<T,1>{inputs, inputs + sequence_size}...};
+      return collection;
+  }, firsts)};
+  return identity;
 }
 
 template <typename ... InputIterators, typename OutputIterator,
