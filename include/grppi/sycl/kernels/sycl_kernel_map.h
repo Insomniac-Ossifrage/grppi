@@ -32,6 +32,17 @@ public:
   }
 };
 
+/**
+ * Main interface used to call the different kernels for the map pattern. Currently there is only one basic kernel.
+ * @tparam data_t Type of the used data.
+ * @tparam array_size Number of input containers.
+ * @tparam Transformer Typename used to define a lambda expression.
+ * @param queue SYCL queue to submit the kernel to.
+ * @param sequence_size Size of the input containers.
+ * @param input_buffers std::array composed of SYCL buffers mapped to the input iterators.
+ * @param output_buffer SYCL buffer mapped to the output iterator.
+ * @param transform_op Operation to be performed to the input data.
+ */
 template<typename data_t, size_t array_size, typename Transformer>
 void map(
   const sycl::queue &queue,

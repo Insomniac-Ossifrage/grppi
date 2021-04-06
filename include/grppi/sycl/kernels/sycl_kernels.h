@@ -2,5 +2,6 @@
 #define GRPPI_SYCL_KERNELS_H
 
 #include "sycl_kernel_map.h"
+#include "sycl_kernel_reduce.h"
 
 #endif //GRPPI_SYCL_KERNELS_H
