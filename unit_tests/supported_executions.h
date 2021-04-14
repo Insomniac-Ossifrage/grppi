@@ -23,6 +23,7 @@
 #include "grppi/omp/parallel_execution_omp.h"
 #include "grppi/tbb/parallel_execution_tbb.h"
 #include "grppi/ff/parallel_execution_ff.h"
+#include "grppi/sycl/parallel_execution_sycl.h"
 
 using executions = ::testing::Types<
   grppi::sequential_execution,
@@ -43,6 +44,7 @@ using executions = ::testing::Types<
   ,
   grppi::parallel_execution_ff
 #endif
+
 >;
 
 using executions_notbb = ::testing::Types<
@@ -80,5 +82,14 @@ using executions_minimal = ::testing::Types<
     grppi::parallel_execution_native
     >;
 
+using executions_sycl_minimal = testing::Types<
+    grppi::sequential_execution,
+    grppi::parallel_execution_native
+#ifdef GRPPI_SYCL
+    ,
+    grppi::parallel_execution_sycl
+#endif
+
+>;
 
 #endif

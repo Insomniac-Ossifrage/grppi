@@ -305,7 +305,7 @@ auto parallel_execution_sycl::reduce(
     sycl::buffer<T, 1> out_buffer{&result, sycl::range<1>(1)};
     in_buffer.template set_final_data(nullptr);
     // Interface
-    grppi::sycl_kernel::reduce<T, Identity, Combiner>(queue_, sequence_size, in_buffer, out_buffer, identity, combine_op);
+    grppi::sycl_kernel::reduce(queue_, sequence_size, in_buffer, out_buffer, std::forward<Identity>(identity), std::forward<Combiner>(combine_op));
 
   }
   return result;

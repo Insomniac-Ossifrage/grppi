@@ -63,8 +63,7 @@ void map(
     // Output Accessor
     auto out_acc{output_buffer.template get_access<sycl::access::mode::write>(cgh)};
 
-    // TODO: Investigate why ComputeCpp wants a named class for a functor
-    cgh.template parallel_for<MapKernel>(sycl::range<1>{sequence_size},
+    cgh.template parallel_for(sycl::range<1>{sequence_size},
       MapKernelFunctor{in_accs, out_acc, transform_op});
   });
   // TODO: Handle Exceptions

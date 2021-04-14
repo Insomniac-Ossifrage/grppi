@@ -137,49 +137,13 @@ endif (GRPPI_FF_ENABLE)
   SYCL backend configuration
 ]]
 set(SYCL_LANGUAGE_VERSION 202001 CACHE STRING "" FORCE)
-# Intel Compiler
-if (${CMAKE_CXX_COMPILER} MATCHES "/opt/intel/oneapi/compiler/(.)+/linux/bin/dpcpp")
-  set(GRPPI_SYCL_DPCPP_FOUND ON CACHE INTERNAL "DPC++ compiler found")
-  message(STATUS "SYCL: DPC++ found")
-else()
-  set(GRPPI_SYCL_DPCPP_FOUND OFF CACHE INTERNAL "DPC++ compiler found")
-endif()
-# ComputeCpp Compiler
-find_package(ComputeCpp)
-if (COMPUTECPP_FOUND)
-  message(STATUS "SYCL: ComputeCpp found")
-endif()
-# Custom Compiler
-if (GRPPI_SYCL_CUSTOM_COMPILER)
-  message(STATUS "SYCL: Custom compiler set.")
-endif()
-# SYCL Compiler
-if (GRPPI_SYCL_DPCPP_FOUND OR COMPUTECPP_FOUND OR GRPPI_SYCL_CUSTOM_COMPILER)
-  option(GRPPI_SYCL_ENABLE "Require SYCL compiler" ON)
-else()
-  option(GRPPI_SYCL_ENABLE "Require SYCL compiler" OFF)
-  set(GRPPI_SYCL_ENABLE OFF CACHE BOOL "Require SYCL compiler" FORCE)
-  message(STATUS "SYCL compiler not found")
-endif()
-# Multiple compilers warning
-# TODO Improve
-if (GRPPI_SYCL_DPCPP_FOUND AND COMPUTECPP_FOUND)
-  message(WARNING "SYCL: Multiple compilers found. This may cause redefinition errors")
-endif()
-
-message(STATUS "SYCL Compiler: " ${GRPPI_SYCL_ENABLE})
 if(GRPPI_SYCL_ENABLE)
   add_definitions(-DGRPPI_SYCL)
-  if (COMPUTECPP_FOUND)
-    include_directories(${ComputeCpp_INCLUDE_DIRS})
-  endif ()
-  if (GRPPI_SYCL_CUSTOM_COMPILER)
-    include_directories(${GRPPI_SYCL_CUSTOM_INCLUDE_DIRS})
-  endif()
+  include_directories(${GRPPI_SYCL_INCLUDE_DIRS})
   # Custom compile flags
-  list(APPEND CMAKE_CXX_FLAGS ${GRPPI_SYCL_CUSTOM_FLAGS}) # Needed for -fsycl
+  list(APPEND CMAKE_CXX_FLAGS ${GRPPI_SYCL_COMPILER_FLAGS}) # Needed for -fsycl
   # Custom compile definitions
-  set(GRPPI_SYCL_OPENCL_VERSION 220 CACHE STRING "OpenCL Version")
+  set(GRPPI_SYCL_OPENCL_VERSION 210 CACHE STRING "OpenCL Version")
   add_compile_definitions(CL_TARGET_OPENCL_VERSION=${GRPPI_SYCL_OPENCL_VERSION})
   option(GRPPI_SYCL_EXPERIMENTAL_REDUCTION "Enable SYCL 2020 reduction" OFF)
   if (GRPPI_SYCL_EXPERIMENTAL_REDUCTION)

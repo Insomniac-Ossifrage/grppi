@@ -4,22 +4,19 @@
 namespace grppi::sycl_kernel {
 
 
-template<typename data_t, typename Identity, typename Combiner>
+template<typename data_t, typename Identity, typename Combiner, size_t work_group_load=256>
 inline void reduce(
   const sycl::queue &queue,
   const size_t sequence_size,
   sycl::buffer<data_t, 1> &input_buffer,
   sycl::buffer<data_t, 1> &output_buffer,
-  Identity identity,
-  Combiner combine_op
+  Identity && identity,
+  Combiner && combine_op
   ) {
   // Parameters
   const constexpr size_t k_factor = 2;
-  // R-Value copies
-  Identity identity_copy = identity;
-  Combiner combine_op_copy = combine_op;
   // Data
-  const size_t local_size = 256 / k_factor;
+  const size_t local_size = work_group_load / k_factor;
   const size_t global_size = (((sequence_size/k_factor) + local_size - 1) / local_size) * local_size;
   size_t num_workgroups = global_size / local_size;
   // Conditional buffer
@@ -35,11 +32,11 @@ inline void reduce(
       // Indexes
       size_t global_id = item.get_global_id(0);
       size_t local_id = item.get_local_id(0);
-      Identity private_memory = identity_copy;
+      Identity private_memory = identity;
       // Thread Reduction
       // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2
       for (size_t i = global_id; i < sequence_size; i+= item.get_global_range(0)) {
-        private_memory += ((i < sequence_size) ? in_acc[i] : identity_copy);
+        private_memory += ((i < sequence_size) ? in_acc[i] : identity);
       }
       local_acc[local_id] = private_memory;
       // Stride
@@ -48,7 +45,7 @@ inline void reduce(
         // Local barrier for items in work group
         // TODO Update to SYCL 2020 function as this one is deprecated.
         item.barrier(sycl::access::fence_space::local_space);
-        if (local_id < i) local_acc[local_id] = combine_op_copy(local_acc[local_id], local_acc[local_id + i]);
+        if (local_id < i) local_acc[local_id] = combine_op(local_acc[local_id], local_acc[local_id + i]);
       }
       // Saving result
       if (local_id == 0) temp_acc[item.get_group(0)] = local_acc[0];
