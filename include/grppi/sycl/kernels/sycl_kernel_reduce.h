@@ -69,7 +69,7 @@ inline void reduce(
     auto host_in_acc = temp_buffer.template get_access<cl::sycl::access::mode::read>();
     // Host reduction
     for (size_t i = 0; i < num_workgroups; i++) {
-      host_out_acc[0] += host_in_acc[i];
+      host_out_acc[0] = combine_op(host_out_acc[0], host_in_acc[i]);
     }
   }
 }
