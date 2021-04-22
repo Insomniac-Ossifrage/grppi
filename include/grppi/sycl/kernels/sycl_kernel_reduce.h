@@ -40,7 +40,7 @@ inline void reduce(
       // Thread Reduction
       // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2
       for (size_t i = global_id; i < sequence_size; i+= item.get_global_range(0)) {
-        private_memory += ((i < sequence_size) ? in_acc[i] : identity);
+        private_memory = combine_op(private_memory, ((i < sequence_size) ? in_acc[i] : identity));
       }
       local_acc[local_id] = private_memory;
       // Stride

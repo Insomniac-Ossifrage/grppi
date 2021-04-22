@@ -144,6 +144,7 @@ if(GRPPI_SYCL_ENABLE)
   list(APPEND CMAKE_CXX_FLAGS ${GRPPI_SYCL_COMPILER_FLAGS}) # Needed for -fsycl
   # Custom compile definitions
   set(GRPPI_SYCL_OPENCL_VERSION 210 CACHE STRING "OpenCL Version")
+  # TODO: Upgrade CMake Version
   add_compile_definitions(CL_TARGET_OPENCL_VERSION=${GRPPI_SYCL_OPENCL_VERSION})
   option(GRPPI_SYCL_EXPERIMENTAL_REDUCTION "Enable SYCL 2020 reduction" OFF)
   if (GRPPI_SYCL_EXPERIMENTAL_REDUCTION)

@@ -328,9 +328,9 @@ constexpr auto parallel_execution_sycl::map_reduce(
     Transformer && transform_op, Combiner && combine_op) const
 {
   // Input iterators to SYCL buffers
-  using T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
+  using Input_T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
   std::array in_buffers = {std::apply([sequence_size](const auto&... inputs){
-      std::array collection{sycl::buffer<T,1>{inputs, inputs + sequence_size}...};
+      std::array collection{sycl::buffer<Input_T,1>{inputs, inputs + sequence_size}...};
       return collection;
   }, firsts)};
   return identity;
