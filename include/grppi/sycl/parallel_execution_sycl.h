@@ -231,6 +231,9 @@ void parallel_execution_sycl::map(
     std::size_t sequence_size, 
     Transformer && transform_op) const
 {
+  // Safeguard
+  if (sequence_size < 1) return;
+  // Types
   using Input_T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type;
   using Output_T = typename std::iterator_traits<OutputIterator>::value_type;
   // Input Iterators
@@ -241,8 +244,9 @@ void parallel_execution_sycl::map(
   // Output Iterator
   sycl::buffer<Output_T , 1> out_buffer{first_out, first_out + sequence_size};
   // Kernel Call
-  sycl_kernel::template map<Output_T , in_buffers.size()>(queue_, sequence_size, in_buffers, out_buffer, transform_op);
+  sycl_kernel::template map<Output_T, in_buffers.size()>(queue_, sequence_size, in_buffers, out_buffer, std::forward<Transformer>(transform_op));
   // Write back to OutputIterator
+  auto var = queue_.get_device().template get_info<sycl::info::device::built_in_kernels>();
   out_buffer.template set_final_data(first_out);
 }
 
@@ -296,6 +300,9 @@ auto parallel_execution_sycl::reduce(
     Identity && identity,
     Combiner && combine_op) const
 {
+  // Safeguard
+  if (sequence_size < 1) return identity;
+  else if (sequence_size == 1) return *first;
   // Output Value
   using T = typename std::iterator_traits<InputIterator>::value_type;
   T result = identity;

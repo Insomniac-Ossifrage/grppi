@@ -328,7 +328,7 @@ public:
 };
 
 // Test for execution policies defined in supported_executions.h
-TYPED_TEST_SUITE(map_test, executions_sycl_minimal ,);
+TYPED_TEST_SUITE(map_test, executions_sycl_minimal, );
 
 TYPED_TEST(map_test, static_empty_unary) // NOLINT
 {

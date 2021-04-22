@@ -3,6 +3,10 @@
 
 namespace grppi::sycl_kernel {
 
+template<typename input_accessor, typename temp_accessor, typename local_accessor, typename Identity, typename Combiner>
+class ReduceKernelFunctor{
+
+};
 
 template<typename data_t, typename Identity, typename Combiner, size_t work_group_load=256>
 inline void reduce(
@@ -10,8 +14,8 @@ inline void reduce(
   const size_t sequence_size,
   sycl::buffer<data_t, 1> &input_buffer,
   sycl::buffer<data_t, 1> &output_buffer,
-  Identity && identity,
-  Combiner && combine_op
+  Identity &&identity,
+  Combiner &&combine_op
   ) {
   // Parameters
   const constexpr size_t k_factor = 2;

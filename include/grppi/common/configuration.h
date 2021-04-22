@@ -32,6 +32,7 @@ enum class execution_backend {
   omp,
   tbb,
   ff,
+  sycl
 };
 
 inline std::ostream & operator<<(std::ostream & os, execution_backend be) {
@@ -41,6 +42,7 @@ inline std::ostream & operator<<(std::ostream & os, execution_backend be) {
     case execution_backend::omp: return os << "omp";
     case execution_backend::tbb: return os << "tbb";
     case execution_backend::ff: return os << "ff";
+    case execution_backend::sycl: return os << "sycl";
     default: return os << "unknown";
   }
 }
@@ -157,6 +159,9 @@ public:
      }
      else if (std::strcmp("ff", str) == 0) {
        dynamic_backend_ = execution_backend::ff;
+     }
+     else if (std::strcmp("sycl", str) == 0) {
+       dynamic_backend_ = execution_backend::sycl;
      }
      else {
        std::cerr << "GrPPI: Invalid backend \"" << str << "\"\n";
