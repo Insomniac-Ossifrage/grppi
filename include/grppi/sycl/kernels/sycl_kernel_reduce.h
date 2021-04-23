@@ -3,9 +3,56 @@
 
 namespace grppi::sycl_kernel {
 
-template<typename input_accessor, typename temp_accessor, typename local_accessor, typename Identity, typename Combiner>
+template<typename Input_Accessor, typename Temp_Accessor, typename Local_Accessor, typename Identity, typename Combiner>
 class ReduceKernelFunctor{
+private:
+    Input_Accessor input_;
+    Temp_Accessor temp_;
+    Local_Accessor local_;
+    const size_t sequence_size_;
+    const size_t local_size_;
+    const Identity identity_;
+    const Combiner combine_op_;
+public:
+    ReduceKernelFunctor(Input_Accessor &input_acc,
+                        Temp_Accessor &temp_acc,
+                        Local_Accessor &local_acc,
+                        size_t sequence_size,
+                        size_t local_size,
+                        Identity identity,
+                        Combiner combiner)
+                        :
+                        input_{input_acc},
+                        temp_{temp_acc},
+                        local_{local_acc},
+                        sequence_size_{sequence_size},
+                        local_size_{local_size},
+                        identity_{identity},
+                        combine_op_{combiner}
+                        {};
 
+    void inline operator() (sycl::nd_item<1> item) const {
+      // Indexes
+      size_t global_id = item.get_global_id(0);
+      size_t local_id = item.get_local_id(0);
+      Identity private_memory = identity_;
+      // Thread Reduction
+      // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2
+      for (size_t i = global_id; i < sequence_size_; i+= item.get_global_range(0)) {
+        private_memory = combine_op_(private_memory, ((i < sequence_size_) ? input_[i] : identity_));
+      }
+      local_[local_id] = private_memory;
+      // Stride
+      // The input accessor must have even elements or the last element won't be reduced
+      for (size_t i = local_size_ / 2; i > 0; i >>= 1) {
+        // Local barrier for items in work group
+        // TODO Update to SYCL 2020 function as this one is deprecated.
+        item.barrier(sycl::access::fence_space::local_space);
+        if (local_id < i) local_[local_id] = combine_op_(local_[local_id], local_[local_id + i]);
+      }
+      // Saving result
+      if (local_id == 0) temp_[item.get_group(0)] = local_[0];
+    }
 };
 
 template<typename data_t, typename Identity, typename Combiner, size_t work_group_load=256>
@@ -31,29 +78,9 @@ inline void reduce(
     auto in_acc = input_buffer.template get_access<sycl::access::mode::read>(cgh);
     auto temp_acc = temp_buffer.template get_access<sycl::access::mode::write>(cgh);
     sycl::accessor<data_t, 1, sycl::access::mode::read_write, sycl::access::target::local> local_acc{sycl::range<1>{local_size}, cgh};
-    // Range
-    cgh.template parallel_for<class Red_Kernel>(sycl::nd_range<1>{global_size, local_size}, [=] (sycl::nd_item<1> item) {
-      // Indexes
-      size_t global_id = item.get_global_id(0);
-      size_t local_id = item.get_local_id(0);
-      Identity private_memory = identity;
-      // Thread Reduction
-      // Global range can be < sequence_size. This reduction is optimal when global_range = sequence_size/2
-      for (size_t i = global_id; i < sequence_size; i+= item.get_global_range(0)) {
-        private_memory = combine_op(private_memory, ((i < sequence_size) ? in_acc[i] : identity));
-      }
-      local_acc[local_id] = private_memory;
-      // Stride
-      // The input accessor must have even elements or the last element won't be reduced
-      for (size_t i = local_size / 2; i > 0; i >>= 1) {
-        // Local barrier for items in work group
-        // TODO Update to SYCL 2020 function as this one is deprecated.
-        item.barrier(sycl::access::fence_space::local_space);
-        if (local_id < i) local_acc[local_id] = combine_op(local_acc[local_id], local_acc[local_id + i]);
-      }
-      // Saving result
-      if (local_id == 0) temp_acc[item.get_group(0)] = local_acc[0];
-    });
+    // Launching Kernel
+    cgh.template parallel_for(sycl::nd_range<1>{global_size, local_size},
+      ReduceKernelFunctor{in_acc, temp_acc, local_acc, sequence_size, local_size, identity, combine_op});
   });
   try {
     const_cast<sycl::queue &>(queue).wait_and_throw();

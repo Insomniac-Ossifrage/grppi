@@ -102,7 +102,7 @@ public:
   */
   template <typename ... InputIterators, typename Identity, 
             typename Transformer, typename Combiner>
-  constexpr auto map_reduce(std::tuple<InputIterators...> firsts, 
+  auto map_reduce(std::tuple<InputIterators...> firsts,
                   std::size_t sequence_size,
                   Identity && identity,
                   Transformer && transform_op, Combiner && combine_op) const;
@@ -321,7 +321,7 @@ auto parallel_execution_sycl::reduce(
 
 template <typename ... InputIterators, typename Identity, 
           typename Transformer, typename Combiner>
-constexpr auto parallel_execution_sycl::map_reduce(
+auto parallel_execution_sycl::map_reduce(
     std::tuple<InputIterators...> firsts,
     std::size_t sequence_size, 
     Identity && identity,

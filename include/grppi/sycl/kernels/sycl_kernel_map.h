@@ -41,7 +41,7 @@ public:
  * @param transform_op Operation to be performed to the input data.
  */
 template<typename data_t, size_t array_size, typename Transformer>
-void inline map(
+inline void map(
   const sycl::queue &queue,
   const size_t sequence_size,
   std::array<sycl::buffer<data_t, 1>, array_size> &input_buffers,
@@ -73,6 +73,6 @@ void inline map(
 
 }
 
-}
+} // end namespace grppi::sycl_kernel
 
 #endif //GRPPI_SYCL_KERNEL_MAP_H
