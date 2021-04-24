@@ -333,6 +333,8 @@ auto parallel_execution_sycl::map_reduce(
       std::array collection{sycl::buffer<Input_T,1>{inputs, inputs + sequence_size}...};
       return collection;
   }, firsts)};
+
+  grppi::sycl_kernel::map_reduce<Input_T>(queue_, sequence_size, in_buffers, std::forward<Transformer>(transform_op), std::forward<Identity>(identity), std::forward<Combiner>(combine_op));
   return identity;
 }
 
