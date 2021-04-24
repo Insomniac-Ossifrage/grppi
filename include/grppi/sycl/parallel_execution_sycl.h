@@ -246,7 +246,6 @@ void parallel_execution_sycl::map(
   // Kernel Call
   sycl_kernel::template map<Output_T, in_buffers.size()>(queue_, sequence_size, in_buffers, out_buffer, std::forward<Transformer>(transform_op));
   // Write back to OutputIterator
-  auto var = queue_.get_device().template get_info<sycl::info::device::built_in_kernels>();
   out_buffer.template set_final_data(first_out);
 }
 
@@ -302,7 +301,7 @@ auto parallel_execution_sycl::reduce(
 {
   // Safeguard
   if (sequence_size < 1) return identity;
-  else if (sequence_size == 1) return *first;
+  else if (sequence_size == 1) return combine_op(*first, *first);
   // Output Value
   using T = typename std::iterator_traits<InputIterator>::value_type;
   T result = identity;
@@ -327,6 +326,9 @@ auto parallel_execution_sycl::map_reduce(
     Identity && identity,
     Transformer && transform_op, Combiner && combine_op) const
 {
+  // Safeguard
+  if (sequence_size < 1) return identity;
+  else if (sequence_size == 1) return combine_op(identity, apply_deref_increment(std::forward<Transformer>(transform_op), firsts));
   // Input iterators to SYCL buffers
   using Input_T = typename std::iterator_traits<std::tuple_element_t<0, std::tuple<InputIterators...>>>::value_type; // TODO: Simplify
   std::array in_buffers = {std::apply([sequence_size](const auto&... inputs){
@@ -334,8 +336,7 @@ auto parallel_execution_sycl::map_reduce(
       return collection;
   }, firsts)};
 
-  grppi::sycl_kernel::map_reduce<Input_T>(queue_, sequence_size, in_buffers, std::forward<Transformer>(transform_op), std::forward<Identity>(identity), std::forward<Combiner>(combine_op));
-  return identity;
+  return grppi::sycl_kernel::map_reduce<Input_T>(queue_, sequence_size, in_buffers, std::forward<Transformer>(transform_op), std::forward<Identity>(identity), std::forward<Combiner>(combine_op));
 }
 
 template <typename ... InputIterators, typename OutputIterator,

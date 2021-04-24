@@ -72,6 +72,7 @@ inline auto map_reduce(
   Identity &&identity,
   Combiner &&combiner
   ) {
+  std::cout << typeid(data_t).name() <<'\n';
   // Parameters
   const constexpr size_t k_factor = 2;
   // Data
@@ -93,6 +94,24 @@ inline auto map_reduce(
       cgh.template parallel_for(sycl::nd_range<1>{global_size, local_size},
         MapReduceFunctor{in_accs, temp_acc, local_acc, sequence_size, local_size, transformer, identity, combiner});
   });
+  try {
+    const_cast<sycl::queue &>(queue).wait_and_throw();
+  } catch (sycl::exception const& e) {
+    std::cout << "Caught synchronous SYCL exception:\n"
+              << e.what() << std::endl;
+  }
+  // Obtain and return the result of the map-reduction
+  {
+    // TODO Implement parallel reduction for larger cases
+    auto host_in_acc = temp_buffer.template get_access<cl::sycl::access::mode::read_write>();
+    if (num_workgroups > 1) {
+      // Host reduction
+      for (size_t i = 0; i < num_workgroups; i++) {
+        host_in_acc[0] = combiner(host_in_acc[0], host_in_acc[i]);
+      }
+    }
+    return host_in_acc[0];
+  }
 }
 
 } // grppi::sycl_kernel

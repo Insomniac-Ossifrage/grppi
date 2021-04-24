@@ -169,7 +169,7 @@ public:
 };
 
 // Test for execution policies defined in supported_executions.h
-TYPED_TEST_SUITE(map_reduce_test, executions,);
+TYPED_TEST_SUITE(map_reduce_test, executions_sycl_minimal ,);
 
 TYPED_TEST(map_reduce_test, static_single_square_sum) //NOLINT
 {
