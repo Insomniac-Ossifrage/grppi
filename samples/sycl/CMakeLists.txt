@@ -15,4 +15,3 @@
 # Data-parallel patterns
 add_subdirectory(map)
 add_subdirectory(reduce)
-add_subdirectory(map-reduce)

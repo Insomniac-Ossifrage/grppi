@@ -301,7 +301,7 @@ auto parallel_execution_sycl::reduce(
 {
   // Safeguard
   if (sequence_size < 1) return identity;
-  else if (sequence_size == 1) return combine_op(*first, *first);
+  else if (sequence_size == 1) return *first;
   // Output Value
   using T = typename std::iterator_traits<InputIterator>::value_type;
   T result = identity;
