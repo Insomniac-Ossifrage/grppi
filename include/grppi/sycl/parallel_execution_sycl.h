@@ -28,6 +28,7 @@
 #include <iterator>
 #include <functional>
 #include "kernels/sycl_kernels.h"
+#include "util/CustomDeviceSelector.h"
 
 namespace grppi {
 /**
@@ -47,6 +48,22 @@ public:
         std::cout << e.what() << std::endl;
       }
     }}} {};
+
+  parallel_execution_sycl(unsigned platform, unsigned device): queue_{grppi::sycl_utils::CustomDeviceSelector(platform, device), [](const sycl::exception_list &exceptions) {
+      for (std::exception_ptr const &e : exceptions) {
+        try {
+          std::rethrow_exception(e);
+        } catch (sycl::exception const &e) {
+          std::cout << "Caught asynchronous SYCL exception:\n" << e.what() << std::endl;
+          std::cout << e.what() << std::endl;
+        }
+      }}} {
+    std::cerr << queue_.get_device().get_info<sycl::info::device::name>() << "\n";
+  }
+
+  sycl::queue& get_queue() {
+    return queue_;
+  }
 
   /**
   \brief Applies a transformation to multiple sequences leaving the result in

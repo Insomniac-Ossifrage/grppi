@@ -64,11 +64,9 @@ inline void reduce(
   Identity &&identity,
   Combiner &&combine_op
   ) {
-  // Parameters
-  const constexpr size_t k_factor = 2;
   // Data
-  const size_t local_size = work_group_load / k_factor;
-  const size_t global_size = (((sequence_size/k_factor) + local_size - 1) / local_size) * local_size;
+  const size_t local_size = work_group_load / 2;
+  const size_t global_size = (((sequence_size/2) + local_size - 1) / local_size) * local_size;
   size_t num_workgroups = global_size / local_size;
   // Conditional buffer
   auto temp_buffer = (num_workgroups > 1) ? sycl::buffer<data_t,1>{sycl::range<1>(num_workgroups)} : output_buffer;
