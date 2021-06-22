@@ -72,7 +72,6 @@ inline auto map_reduce(
   Identity &&identity,
   Combiner &&combiner
   ) {
-  std::cout << typeid(data_t).name() <<'\n';
   // Parameters
   const constexpr size_t k_factor = 2;
   // Data

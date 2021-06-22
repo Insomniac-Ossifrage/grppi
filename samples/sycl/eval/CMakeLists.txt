@@ -1,3 +1,6 @@
+add_executable(Simple_Map simple_map.cpp)
+target_link_libraries(Simple_Map ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(Eval_Map_Mandelbrot map_mandelbrot.cpp)
 target_link_libraries(Eval_Map_Mandelbrot ${CMAKE_THREAD_LIBS_INIT})
 
@@ -8,5 +11,7 @@ target_link_libraries(Eval_Reduce_Sequence ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(Eval_Reduce_Sequence_Pure reduce_sequence_pure.cpp)
 
-add_executable(Simple_Map simple_map.cpp)
-target_link_libraries(Simple_Map ${CMAKE_THREAD_LIBS_INIT})
+add_executable(Eval_MapReduce_Float map_reduce_float.cpp)
+target_link_libraries(Eval_MapReduce_Float ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(Eval_MapReduce_Float_Pure map_reduce_float_pure.cpp)
