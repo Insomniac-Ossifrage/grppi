@@ -145,7 +145,7 @@ if(GRPPI_SYCL_ENABLE)
   # Custom compile definitions
   set(GRPPI_SYCL_OPENCL_VERSION 210 CACHE STRING "OpenCL Version")
   # TODO: Upgrade CMake Version
-  add_compile_definitions(CL_TARGET_OPENCL_VERSION=${GRPPI_SYCL_OPENCL_VERSION})
+  # add_compile_definitions(CL_TARGET_OPENCL_VERSION=${GRPPI_SYCL_OPENCL_VERSION})
   option(GRPPI_SYCL_EXPERIMENTAL_REDUCTION "Enable SYCL 2020 reduction" OFF)
   if (GRPPI_SYCL_EXPERIMENTAL_REDUCTION)
     add_compile_definitions(GRPPI_SYCL_EXPERIMENTAL_REDUCTION)

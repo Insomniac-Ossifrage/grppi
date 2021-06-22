@@ -1,19 +1,8 @@
-#ifndef GRPPI_SAMPLES_SYCL_MANDELBROT_H
-#define GRPPI_SAMPLES_SYCL_MANDELBROT_H
-
 #include <iostream>
 #include <complex>
 #include <vector>
 #include "grppi/grppi.h"
-#include "grppi/dyn/dynamic_execution.h"
 #include "grppi/sycl/parallel_execution_sycl.h"
-
-  grppi::dynamic_execution select_backend(const std::string &mode, unsigned platform, unsigned device) {
-    if ("seq" == mode) return grppi::sequential_execution{};
-    if ("sycl" == mode) return grppi::parallel_execution_sycl{platform, device};
-    if ("nat" == mode) return  grppi::parallel_execution_native{};
-    return {};
-  }
 
   void direct(char **argv) {
     auto ex = grppi::parallel_execution_sycl(std::stoi(argv[2]), std::stoi(argv[3]));
@@ -57,17 +46,6 @@
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     std::cout << image_size << ", " << iterations << ", " << diff.count() << std::endl;
-
-    std::ofstream outfile("mandelbrot.pbm");
-    outfile << "P2 " << image_size << " " << image_size << " " << iterations << "\n";
-    // Save file
-    for (unsigned i{0}; i < image_size; i++) {
-      for (unsigned j{0}; j < image_size; j++) {
-        outfile << (int) data[i * image_size + j] << " ";
-      }
-      outfile << "\n";
-    }
-    outfile.close();
   }
 
   int main(int argc, char **argv) {
@@ -79,7 +57,7 @@
       direct(argv);
       return 0;
     }
-    grppi::dynamic_execution ex = select_backend(argv[1], std::stoi(argv[2]), std::stoi(argv[3]));
+    auto ex = grppi::parallel_execution_sycl(std::stoi(argv[2]), std::stoi(argv[3]));
     unsigned image_size(std::stoul(argv[4]));
     unsigned iterations(std::stoul(argv[5]));
     double xmin = -1.0;
@@ -116,18 +94,5 @@
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     std::cout << image_size << ", " << iterations << ", " << diff.count() << std::endl;
-
-    std::ofstream outfile("mandelbrot.pbm");
-    outfile << "P2 " << image_size << " " << image_size << " " << iterations << "\n";
-    // Save file
-    for (unsigned i{0}; i < image_size; i++) {
-      for (unsigned j{0}; j < image_size; j++) {
-        outfile << (int) data[i * image_size + j] << " ";
-      }
-      outfile << "\n";
-    }
-    outfile.close();
     return 0;
   }
-
-#endif
