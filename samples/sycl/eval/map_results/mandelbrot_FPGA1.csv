@@ -1,0 +1,7 @@
+mode, image size, iterations, time (ms)
+sycldir, 128, 512, 68
+sycldir, 256, 512, 211
+sycldir, 512, 512, 835
+sycldir, 1024, 512, 3172
+sycldir, 2048, 512, 11097
+sycldir, 4096, 512, 38886
